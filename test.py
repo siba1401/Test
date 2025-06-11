@@ -104,9 +104,15 @@ if uploaded_file:
 
     # Step 6: Compile failures
     failures_list = []
+    borderline_tee = []
+    borderline_final = []
+
     subjects = [col.replace("Fail_Reason_", "") for col in df.columns if col.startswith("Fail_Reason_")]
     for subject in subjects:
         fail_col = f'Fail_Reason_{subject}'
+        tee_col = f'TEE_{subject}'
+        total_col = f'Total_{subject}'
+
         failed = df[df[fail_col] != 'Pass'].copy()
         if not failed.empty:
             failed["Subject"] = subject.replace('_', ' ')
@@ -114,15 +120,35 @@ if uploaded_file:
             subset_cols = [add_id_col]
             if student_name_col:
                 subset_cols.append(student_name_col)
-            for extra_col in ["Subject", "Reason"]:
-                if extra_col not in subset_cols:
-                    subset_cols.append(extra_col)
-            # Remove duplicate columns in case they sneak in
-            failures_list.append(failed.loc[:, ~failed.columns.duplicated()][subset_cols])
+            subset_cols += ["Subject", "Reason"]
+            failures_list.append(failed[subset_cols].copy())
+
+        # TEE between 37 and 39
+        tee_filtered = df[(df[tee_col] >= 37) & (df[tee_col] <= 39)].copy()
+        tee_filtered["Subject"] = subject.replace('_', ' ')
+        tee_filtered["TEE_Score"] = tee_filtered[tee_col]
+        if not tee_filtered.empty:
+            subset_cols = [add_id_col]
+            if student_name_col:
+                subset_cols.append(student_name_col)
+            subset_cols += ["Subject", "TEE_Score"]
+            borderline_tee.append(tee_filtered[subset_cols].copy())
+
+        # Final marks between 37 and 39
+        final_filtered = df[(df[total_col] >= 37) & (df[total_col] <= 39)].copy()
+        final_filtered["Subject"] = subject.replace('_', ' ')
+        final_filtered["Final_Marks"] = final_filtered[total_col]
+        if not final_filtered.empty:
+            subset_cols = [add_id_col]
+            if student_name_col:
+                subset_cols.append(student_name_col)
+            subset_cols += ["Subject", "Final_Marks"]
+            borderline_final.append(final_filtered[subset_cols].copy())
 
     # Step 7: Output
     if failures_list:
         failures_df = pd.concat(failures_list, ignore_index=True)
+        failures_df = failures_df.loc[:, ~failures_df.columns.duplicated()]
         st.subheader("🔴 Failed Students List:")
         st.dataframe(failures_df.head(100), use_container_width=True)
 
@@ -130,3 +156,21 @@ if uploaded_file:
         st.download_button("📥 Download Full Failure Report", data=csv, file_name="failed_students.csv", mime="text/csv")
     else:
         st.success("✅ All students passed!")
+
+    if borderline_tee:
+        tee_df = pd.concat(borderline_tee, ignore_index=True)
+        tee_df = tee_df.loc[:, ~tee_df.columns.duplicated()]
+        st.subheader("🟠 Students with TEE Scores Between 37 and 39:")
+        st.dataframe(tee_df.head(100), use_container_width=True)
+
+        tee_csv = tee_df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download TEE Borderline Report", data=tee_csv, file_name="tee_37_39.csv", mime="text/csv")
+
+    if borderline_final:
+        final_df = pd.concat(borderline_final, ignore_index=True)
+        final_df = final_df.loc[:, ~final_df.columns.duplicated()]
+        st.subheader("🟡 Students with Final Marks Between 37 and 39:")
+        st.dataframe(final_df.head(100), use_container_width=True)
+
+        final_csv = final_df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Final Marks Borderline Report", data=final_csv, file_name="final_37_39.csv", mime="text/csv")
